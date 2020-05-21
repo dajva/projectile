@@ -3763,6 +3763,10 @@ directory to open."
   (and projectile-cache-serialization-in-progress
        (not (async-ready projectile-cache-serialization-in-progress))))
 
+(defun projectile-serialize-cache-sync ()
+  "Serializes the memory cache to the hard drive."
+  (projectile-serialize projectile-projects-cache projectile-cache-file))
+
 (defun projectile-serialize-cache ()
   "Serializes the memory cache to the hard drive."
   (if (not (projectile-is-serialing-cache-p))
@@ -3772,7 +3776,9 @@ directory to open."
               (async-start
                `(lambda ()
                   (require 'projectile ,(locate-library "projectile"))
-                  (projectile-serialize ,projectile-projects-cache ,projectile-cache-file))
+                  ,(async-inject-variables "projectile-projects-cache")
+                  ,(async-inject-variables "projectile-cache-file")
+                  (projectile-serialize-cache-sync))
                (lambda (result)
                  (message "Serialization Done")
                  (when projectile-cache-serialization-needed

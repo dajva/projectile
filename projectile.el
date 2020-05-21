@@ -45,6 +45,7 @@
 (eval-when-compile
   (require 'find-dired)
   (require 'subr-x))
+(require 'async)
 
 (eval-when-compile
   (defvar ag-ignore-list)
@@ -549,6 +550,12 @@ project."
 
 (defvar projectile-projects-cache nil
   "A hashmap used to cache project file names to speed up related operations.")
+
+(defvar projectile-cache-serialization-in-progress nil
+  "Flag.")
+
+(defvar projectile-cache-serialization-needed nil
+  "Flag.")
 
 (defvar projectile-projects-cache-time nil
   "A hashmap used to record when we populated `projectile-projects-cache'.")
@@ -3752,9 +3759,27 @@ directory to open."
            (lambda (f) (string-prefix-p project-root (expand-file-name f)))
            recentf-list)))))
 
+(defun projectile-is-serialing-cache-p ()
+  (and projectile-cache-serialization-in-progress
+       (not (async-ready projectile-cache-serialization-in-progress))))
+
 (defun projectile-serialize-cache ()
   "Serializes the memory cache to the hard drive."
-  (projectile-serialize projectile-projects-cache projectile-cache-file))
+  (if (not (projectile-is-serialing-cache-p))
+      (progn
+        (setf projectile-cache-serialization-needed nil)
+        (setf projectile-cache-serialization-in-progress
+              (async-start
+               `(lambda ()
+                  (require 'projectile ,(locate-library "projectile"))
+                  (projectile-serialize ,projectile-projects-cache ,projectile-cache-file))
+               (lambda (result)
+                 (message "Serialization Done")
+                 (when projectile-cache-serialization-needed
+                   (setf projectile-cache-serialization-in-progress nil)
+                   (projectile-serialize-cache))))))
+    (message "Serialization in progress")
+    (setf projectile-cache-serialization-needed t)))
 
 (defvar projectile-configure-cmd-map
   (make-hash-table :test 'equal)
